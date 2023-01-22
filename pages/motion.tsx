@@ -72,4 +72,18 @@ async function Content(){
         })
     }
 
+    async function stopAcceleration(){
+        const stopAcceleration = () => {
+            if (accelHandler) {
+                accelHandler.remove();
+            }
+        }
+        const {
+            data: [{id: _stopAccelerationLinkId}],
+        } = await deep.insert({
+            link_id: stopAccelerationLinkId,
+            value: "Stopped",
+        },{ table: "strings" });
+    }
+
 }
