@@ -14,5 +14,20 @@ let accelHandler:PluginListenerHandle;
 let orientationHandler:PluginListenerHandle;
 
 async function Content(){
+    const deep=useDeep();
+    const [deviceLinkId,setDeviceLinkId]=useLocalStore(
+        'deviceLinkId',
+        undefined
+    );
+
+    const [requests, setRequest] = useLocalStore("Requests", []);
+    const motionLinkId = await deep.id(deep.linkId, "Motion");
+    const requestAccelLinkId = await deep.id(motionLinkId, "Accel");
+    const requestOrientationLinkId = await deep.id(motionLinkId, "Orientation");
+    const stopAccelerationLinkId = await deep.id(motionLinkId, "Stop");
+    const removeListenersLinkId = await deep.id(motionLinkId, "Remove");
+
+
+    const containTypeLinkId = await deep.id('@deep-foundation/core', 'Contain');
 
 }
