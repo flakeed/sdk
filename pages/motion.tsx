@@ -98,4 +98,48 @@ async function Content(){
         },{ table: "strings" });
     }
 
+    return (
+        <Stack>
+            <Text>{deviceLinkId}</Text>
+            <Button
+                onClick={async ()=>{
+                    try{
+                        await (DeviceMotionEvent as any).requestPermission()
+                    }
+                    catch (e){
+                        //TODO
+                    }
+                    await subscribeToRequestAccelStatus();
+                }}>
+                Request Accel Permission
+            </Button>
+
+            <Button
+                onClick={async ()=>{
+                    try{
+                        await (DeviceMotionEvent as any).requestPermission()
+                    }
+                    catch (e){
+                        //TODO
+                    }
+                    await subscribeToRequestOrientationStatus();
+                }}>
+                Request Orientation Permission
+            </Button>
+
+            <Button
+                onClick={async ()=>{
+                    await stopAcceleration();
+                }}>
+                Stop the acceleration
+            </Button>
+
+            <Button
+                onClick={async ()=>{
+                    await removeAllListeners();
+                }}>
+                Remove Listeners
+            </Button>
+        </Stack>
+    )
 }
