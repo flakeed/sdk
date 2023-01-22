@@ -9,3 +9,10 @@ import {
 } from "@deep-foundation/deeplinks/imports/client";
 import {Button, ChakraProvider, Stack, Text} from "@chakra-ui/react";
 import {PACKAGE_NAME as DEVICE_PACKAGE_NAME} from "../imports/device/package-name";
+
+let accelHandler:PluginListenerHandle;
+let orientationHandler:PluginListenerHandle;
+
+async function Content(){
+
+}
