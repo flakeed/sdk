@@ -51,4 +51,25 @@ async function Content(){
         })
     }
 
+    async function subscribeToRequestOrientationStatus() {
+        orientationHandler=await Motion.addListener('orientation', event => {
+            console.log(event);
+
+            useEffect(() => {
+                const updateRequestStatus = async (requests) => {
+                    const {
+                        data: [{id: _requestOrientationLinkId}],
+                    } = await deep.insert({
+                        link_id: requestOrientationLinkId,
+                        value: requests.accepted ? "accepted" : "accept",
+                    },{ table: "strings" });
+                }
+                if (requests.length > 0) {
+                    updateRequestStatus(requests);
+                    setRequest([]);
+                }
+            }, [requests])
+        })
+    }
+
 }
