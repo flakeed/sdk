@@ -86,4 +86,16 @@ async function Content(){
         },{ table: "strings" });
     }
 
+    async function removeAllListeners(){
+        const removeListeners = () => {
+            Motion.removeAllListeners();
+        };
+        const {
+            data: [{id: _removeListenersLinkId}],
+        } = await deep.insert({
+            link_id: removeListenersLinkId,
+            value: "Removed",
+        },{ table: "strings" });
+    }
+
 }
