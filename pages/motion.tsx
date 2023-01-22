@@ -30,4 +30,25 @@ async function Content(){
 
     const containTypeLinkId = await deep.id('@deep-foundation/core', 'Contain');
 
+    async function subscribeToRequestAccelStatus() {
+        accelHandler=await Motion.addListener('accel', event => {
+            console.log(event);
+
+            useEffect(() => {
+                const updateRequestStatus = async (requests) => {
+                    const {
+                        data: [{id: _requestAccelLinkId}],
+                    } = await deep.insert({
+                        link_id: requestAccelLinkId,
+                        value: requests.accepted ? "accepted" : "accept",
+                    },{ table: "strings" });
+                }
+                if (requests.length > 0) {
+                    updateRequestStatus(requests);
+                    setRequest([]);
+                }
+            }, [requests])
+        })
+    }
+
 }
