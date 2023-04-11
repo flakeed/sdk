@@ -94,7 +94,7 @@ export async function installPackage () {
       } },
     });
 
-const { data: [{ id: messagingTree }] } = await deep.insert({
+    const { data: [{ id: messagingTree }] } = await deep.insert({
       type_id: treeTypeLinkId,
       in: { data: {
         type_id: containTypeLinkId,
