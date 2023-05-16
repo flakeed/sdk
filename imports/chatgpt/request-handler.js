@@ -129,21 +129,45 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
   const allMessages = await getMessages({ messageLinks });
   const messagesToSend = [...allMessages];
 
-const { data: systemMessageLinks } = await deep.select({
-    type_id: systemTypeLinkId,
-    to_id: currentConversation.parent.id,
-  }, {returning: `id message: from{ id value} conversation:to{id}`});
+const { data: userLinkedSystemMessageLinks } = await deep.select({
+  type_id: systemTypeLinkId,
+  to_id:triggeredByLinkId,
+},  {returning: `id message: from{ id value} conversation:to{id}`});
+console.log("userLinkedSystemMessageLinks",userLinkedSystemMessageLinks)
+// Fetching system messages linked to the conversation
+const { data: conversationLinkedSystemMessageLink } = await deep.select({
+  type_id: systemTypeLinkId,
+  to_id: currentConversation.parent.id,
+},{returning: `id message: from{ id value} conversation:to{id}`});
+console.log("conversationLinkedSystemMessageLink",conversationLinkedSystemMessageLink)
 
-  if(systemMessageLinks?.[0]?.message?.value?.value){
-    if (systemMessageLinks.length > 1) {
-      throw new Error("A systemMessageLink link is exist in the current conversation");
-    }
-     systemMessage = systemMessageLinks[0].message.value.value;
-  console.log("messagesToSend before unshift: ", messagesToSend);
+if (conversationLinkedSystemMessageLink && conversationLinkedSystemMessageLink.length > 0) {
+  const systemMessageLink = conversationLinkedSystemMessageLink[0];
+  if (!systemMessageLink.message?.value?.value) {
+    throw new Error(`System message with link to conversation ##${systemMessageLink.id} must have a value`);
+  } else {
+    systemMessage = systemMessageLink.message.value.value;
+  }
+} else if (userLinkedSystemMessageLinks && userLinkedSystemMessageLinks.length > 0) {
+  if (userLinkedSystemMessageLinks.length > 1) {
+    throw new Error("Multiple system messages linked to the user are found");
+  }
+  
+  const userLinkedSystemMessageLink = userLinkedSystemMessageLinks[0];
+  
+  if (!userLinkedSystemMessageLink.message?.value?.value) {
+    throw new Error(`System message with link to user ##${userLinkedSystemMessageLink.id} must have a value`);
+  } else {
+    systemMessage = userLinkedSystemMessageLink.message.value.value;
+  }
+}
+
+if (systemMessage) {
   messagesToSend.unshift({
     role: "system",
     content: systemMessage,
   });
+
   console.log("messagesToSend after unshift: ", messagesToSend);
   console.log("system message ", systemMessage);
 }
