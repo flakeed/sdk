@@ -13,9 +13,12 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
   const containTypeLinkId = await deep.id('@deep-foundation/core', 'Contain');
   const messagingTreeId = await deep.id('@deep-foundation/messaging', 'MessagingTree');
   const systemTypeLinkId = await deep.id('@deep-foundation/chatgpt', 'System');
+  const tokensTypeLinkId = await deep.id("@deep-foundation/tokens", "Tokens")
   const reservedIds = await deep.reserve(1);
   const chatGPTMessageLinkId = reservedIds.pop();
+  let systemMessageId;
   let model;
+  const MAX_TOKENS = 4096;
   let systemMessage;
 
   const { data: [messageLink] } = await deep.select({
@@ -66,6 +69,13 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
         from_id
         type_id
         to_id
+      }
+      tokens: out (where: { type_id: { _eq: ${tokensTypeLinkId}} }) { 
+      id
+      from_id
+      type_id
+      to_id
+      value
       }
     }`
   })
@@ -126,58 +136,88 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
   const messageLinks = conversationLink
     .map(item => item.parent)
     .filter(link => link && link.type_id === messageTypeLinkId);
-  const allMessages = await getMessages({ messageLinks });
+  let allMessages = await getMessages({ messageLinks });
+  let messagesToSendToOpenAI = [];
   const messagesToSend = [...allMessages];
 
-const { data: userLinkedSystemMessageLinks } = await deep.select({
-  type_id: systemTypeLinkId,
-  to_id:triggeredByLinkId,
-},  {returning: `id message: from{ id value} conversation:to{id}`});
-console.log("userLinkedSystemMessageLinks",userLinkedSystemMessageLinks)
-// Fetching system messages linked to the conversation
-const { data: conversationLinkedSystemMessageLink } = await deep.select({
-  type_id: systemTypeLinkId,
-  to_id: currentConversation.parent.id,
-},{returning: `id message: from{ id value} conversation:to{id}`});
-console.log("conversationLinkedSystemMessageLink",conversationLinkedSystemMessageLink)
+  const { data: userLinkedSystemMessageLinks } = await deep.select({
+    type_id: systemTypeLinkId,
+    to_id: triggeredByLinkId,
+  }, { returning: `id message: from{ id value} conversation:to{id}` });
+  console.log("userLinkedSystemMessageLinks", userLinkedSystemMessageLinks)
+  // Fetching system messages linked to the conversation
+  const { data: conversationLinkedSystemMessageLink } = await deep.select({
+    type_id: systemTypeLinkId,
+    to_id: currentConversation.parent.id,
+  }, { returning: `id message: from{ id value} conversation:to{id}` });
+  console.log("conversationLinkedSystemMessageLink", conversationLinkedSystemMessageLink)
 
-if (conversationLinkedSystemMessageLink && conversationLinkedSystemMessageLink.length > 0) {
-  const systemMessageLink = conversationLinkedSystemMessageLink[0];
-  if (!systemMessageLink.message?.value?.value) {
-    throw new Error(`System message with link to conversation ##${systemMessageLink.id} must have a value`);
-  } else {
-    systemMessage = systemMessageLink.message.value.value;
+  if (conversationLinkedSystemMessageLink && conversationLinkedSystemMessageLink.length > 0) {
+    const systemMessageLink = conversationLinkedSystemMessageLink[0];
+    if (!systemMessageLink.message?.value?.value) {
+      throw new Error(`System message with link to conversation ##${systemMessageLink.id} must have a value`);
+    } else {
+      systemMessage = systemMessageLink.message.value.value;
+      systemMessageId = systemMessageLink.message;
+    }
+  } else if (userLinkedSystemMessageLinks && userLinkedSystemMessageLinks.length > 0) {
+    if (userLinkedSystemMessageLinks.length > 1) {
+      throw new Error("Multiple system messages linked to the user are found");
+    }
+
+    const userLinkedSystemMessageLink = userLinkedSystemMessageLinks[0];
+
+    if (!userLinkedSystemMessageLink.message?.value?.value) {
+      throw new Error(`System message with link to user ##${userLinkedSystemMessageLink.id} must have a value`);
+    } else {
+      systemMessage = userLinkedSystemMessageLink.message.value.value;
+      systemMessageId = userLinkedSystemMessageLink.message;
+    }
   }
-} else if (userLinkedSystemMessageLinks && userLinkedSystemMessageLinks.length > 0) {
-  if (userLinkedSystemMessageLinks.length > 1) {
-    throw new Error("Multiple system messages linked to the user are found");
+
+  if (systemMessage) {
+    const { data: tokensLinkedToSystemMessage } = await deep.select({
+      type_id: tokensTypeLinkId,
+      from_id: systemMessageId.id,
+      to_id: systemMessageId.id,
+    });
+    console.log("tokensLinkedToSystemMessage", tokensLinkedToSystemMessage)
+    let tokenCount = tokensLinkedToSystemMessage[0].value?.value;
+    console.log("tokenCount", tokenCount)
+    messagesToSend.unshift({
+      role: "system",
+      content: systemMessage,
+      tokens: tokenCount,
+    });
+
+    console.log("system message ", systemMessage);
   }
-  
-  const userLinkedSystemMessageLink = userLinkedSystemMessageLinks[0];
-  
-  if (!userLinkedSystemMessageLink.message?.value?.value) {
-    throw new Error(`System message with link to user ##${userLinkedSystemMessageLink.id} must have a value`);
-  } else {
-    systemMessage = userLinkedSystemMessageLink.message.value.value;
+  const tokenLimit = MAX_TOKENS * 7 / 8;
+  let totalTokens = 0;
+  for (let i = 0; i < messagesToSend.length; i++) {
+    const message = messagesToSend[i];
+
+    if (message.role === 'system' || totalTokens + message.tokens <= MAX_TOKENS) {
+      messagesToSendToOpenAI.push({ role: message.role, content: message.content });
+      totalTokens += message.tokens;
+    }
+
+    if (totalTokens > tokenLimit) {
+      while (totalTokens > MAX_TOKENS && messagesToSendToOpenAI.length > 1) {
+        let messageToRemove = messagesToSendToOpenAI[1];
+        totalTokens -= messageToRemove.tokens;
+        messagesToSendToOpenAI.splice(1, 1);
+      }
+    }
   }
-}
+  console.log("messagesToSendToOpenAI", messagesToSendToOpenAI)
+  console.log("total Tokens", totalTokens)
 
-if (systemMessage) {
-  messagesToSend.unshift({
-    role: "system",
-    content: systemMessage,
-  });
-
-  console.log("messagesToSend after unshift: ", messagesToSend);
-  console.log("system message ", systemMessage);
-}
-
-  console.log("messagesToSend", messagesToSend)
-
+  console.log("after slice messages", messagesToSend)
   const response = await openai.createChatCompletion({
     model: model,
     messages: [
-      ...messagesToSend,
+      ...messagesToSendToOpenAI,
       {
         role: 'user',
         content: message,
@@ -239,10 +279,14 @@ if (systemMessage) {
 
   async function getMessages({ messageLinks }) {
     return Promise.all(
-      messageLinks.map(async (link) => ({
-        role: await getMessageRole({ messageLink: link }),
-        content: link.value.value,
-      }))
+      messageLinks.map(async (link) => {
+        const tokens = link.tokens?.length > 0 ? link.tokens[0].value.value : undefined;
+        return {
+          role: await getMessageRole({ messageLink: link }),
+          content: link.value.value,
+          tokens: tokens,
+        }
+      })
     );
   }
 
