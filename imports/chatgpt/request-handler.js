@@ -1,5 +1,5 @@
 async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
-    const startTime = Date.now();
+  const startTime = Date.now();
   const PACKAGE_NAME = `@deep-foundation/chatgpt`;
   const { Configuration, OpenAIApi } = require('openai');
   const chatGPTTypeLinkId = await deep.id(PACKAGE_NAME, 'ChatGPT');
@@ -138,7 +138,6 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
     .map(item => item.parent)
     .filter(link => link && link.type_id === messageTypeLinkId);
   let allMessages = await getMessages({ messageLinks });
-  let messagesToSendToOpenAI = [];
   const messagesToSend = [...allMessages];
 
   const { data: userLinkedSystemMessageLinks } = await deep.select({
@@ -194,30 +193,27 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
     console.log("system message ", systemMessage);
   }
   if (model === 'gpt-3.5-turbo') {
-  MAX_TOKENS = 4096;
-} else if (model === 'gpt-4') {
-  MAX_TOKENS = 8192;
-} else {
-  throw new Error(`Unsupported model: ${model}`);
-}
+    MAX_TOKENS = 4096;
+  } else if (model === 'gpt-4') {
+    MAX_TOKENS = 8192;
+  } else {
+    throw new Error(`Unsupported model: ${model}`);
+  }
   const tokenLimit = MAX_TOKENS * 7 / 8;
   let totalTokens = 0;
-  for (let i = 0; i < messagesToSend.length; i++) {
+  let messagesToSendToOpenAI = [];
+
+  for (let i = messagesToSend.length - 1; i >= 0; i--) {
     const message = messagesToSend[i];
 
     if (message.role === 'system' || totalTokens + message.tokens <= MAX_TOKENS) {
-      messagesToSendToOpenAI.push({ role: message.role, content: message.content });
+      messagesToSendToOpenAI.unshift({ role: message.role, content: message.content });
       totalTokens += message.tokens;
-    }
-
-    if (totalTokens > tokenLimit) {
-      while (totalTokens > MAX_TOKENS && messagesToSendToOpenAI.length > 1) {
-        let messageToRemove = messagesToSendToOpenAI[1];
-        totalTokens -= messageToRemove.tokens;
-        messagesToSendToOpenAI.splice(1, 1);
-      }
+    } else {
+      break;
     }
   }
+
   console.log("messagesToSendToOpenAI", messagesToSendToOpenAI)
   console.log("total Tokens", totalTokens)
 
@@ -225,11 +221,7 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
   const response = await openai.createChatCompletion({
     model: model,
     messages: [
-      ...messagesToSendToOpenAI,
-      {
-        role: 'user',
-        content: message,
-      },
+      ...messagesToSendToOpenAI
     ],
   });
 
@@ -368,19 +360,16 @@ async ({ data: { newLink: replyLink, triggeredByLinkId }, deep, require }) => {
     return resultTokenLink;
   }
   const endTime = Date.now();
-  const duration = (endTime - startTime)/1000;
-return {
-  request: {
-    model: model,
-    messages: [
-      ...messagesToSendToOpenAI,
-      {
-        role: 'user',
-        content: message,
-      },
-    ],
-  },
-  response: response.data,
-  duration: duration
-};
+  const duration = (endTime - startTime) / 1000;
+  return {
+    request: {
+      model: model,
+      messages: [
+        ...messagesToSendToOpenAI
+      ],
+    },
+    response: response.data,
+    duration: duration,
+    totalTokens: totalTokens
+  };
 };
